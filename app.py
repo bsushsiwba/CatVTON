@@ -240,53 +240,56 @@ HEADER = """
 """
 
 
+def process_single_request(trigger_file, garment_type):
+    try:
+        # Load images
+        person_img = Image.open("person_image.png").convert("RGB")
+        cloth_img = Image.open("cloth_image.png").convert("RGB")
+        
+        # Resize images
+        person_img = resize_and_crop(person_img, (args.width, args.height))
+        cloth_img = resize_and_padding(cloth_img, (args.width, args.height))
+        
+        # Generate mask for specified garment type
+        mask = automasker(person_img, garment_type)['mask']
+        mask = mask_processor.blur(mask, blur_factor=9)
+        
+        # Process with pipeline
+        result = pipeline(
+            image=person_img,
+            condition_image=cloth_img,
+            mask=mask,
+            num_inference_steps=50,
+            guidance_scale=2.5,
+            generator=torch.Generator(device='cuda').manual_seed(42)
+        )[0]
+        
+        # Save result
+        result.save("cat_result.png")
+        
+        # Create completion file
+        with open("complete.txt", "w") as f:
+            f.write("done")
+        
+        # Clean up
+        os.remove(trigger_file)
+        
+    except Exception as e:
+        print(f"Error processing file-based request: {e}")
+
 def process_file_based_request():
     while True:
         if os.path.exists("lower.txt"):
-            try:
-                # Load images
-                person_img = Image.open("person_image.png").convert("RGB")
-                cloth_img = Image.open("cloth_image.png").convert("RGB")
-
-                # Resize images
-                person_img = resize_and_crop(person_img, (args.width, args.height))
-                cloth_img = resize_and_padding(cloth_img, (args.width, args.height))
-
-                # Generate mask for lower garment
-                mask = automasker(person_img, "lower")["mask"]
-                mask = mask_processor.blur(mask, blur_factor=9)
-
-                # Process with pipeline
-                result = pipeline(
-                    image=person_img,
-                    condition_image=cloth_img,
-                    mask=mask,
-                    num_inference_steps=50,
-                    guidance_scale=2.5,
-                    generator=torch.Generator(device="cuda").manual_seed(42),
-                )[0]
-
-                # Save result
-                result.save("cat_result.png")
-
-                # Create completion file
-                with open("complete.txt", "w") as f:
-                    f.write("done")
-
-                # Clean up
-                os.remove("lower.txt")
-
-            except Exception as e:
-                print(f"Error processing file-based request: {e}")
-
-        time.sleep(0.1)  # Check every second
-
+            process_single_request("lower.txt", "lower")
+        elif os.path.exists("full.txt"):
+            process_single_request("full.txt", "overall")
+        time.sleep(1)  # Check every second
 
 def app_gradio():
     # Start the file monitoring thread
     monitor_thread = threading.Thread(target=process_file_based_request, daemon=True)
     monitor_thread.start()
-
+    
     with gr.Blocks(title="CatVTON") as demo:
         gr.Markdown(HEADER)
         with gr.Row():
