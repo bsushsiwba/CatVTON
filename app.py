@@ -109,7 +109,8 @@ pipeline = CatVTONPipeline(
     attn_ckpt_version="mix",
     weight_dtype=init_weight_dtype(args.mixed_precision),
     use_tf32=args.allow_tf32,
-    device='cuda'
+    device='cuda',
+    skip_safety_check=True
 )
 # AutoMasker
 mask_processor = VaeImageProcessor(vae_scale_factor=8, do_normalize=False, do_binarize=True, do_convert_grayscale=True)
