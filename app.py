@@ -245,15 +245,15 @@ def process_single_request(trigger_file, garment_type):
         # Load images
         person_img = Image.open("person_image.png").convert("RGB")
         cloth_img = Image.open("cloth_image.png").convert("RGB")
-        
+
         # Resize images
         person_img = resize_and_crop(person_img, (args.width, args.height))
         cloth_img = resize_and_padding(cloth_img, (args.width, args.height))
-        
+
         # Generate mask for specified garment type
-        mask = automasker(person_img, garment_type)['mask']
+        mask = automasker(person_img, garment_type)["mask"]
         mask = mask_processor.blur(mask, blur_factor=9)
-        
+
         # Process with pipeline
         result = pipeline(
             image=person_img,
@@ -261,21 +261,22 @@ def process_single_request(trigger_file, garment_type):
             mask=mask,
             num_inference_steps=50,
             guidance_scale=2.5,
-            generator=torch.Generator(device='cuda').manual_seed(42)
+            generator=torch.Generator(device="cuda").manual_seed(42),
         )[0]
-        
+
         # Save result
         result.save("cat_result.png")
-        
+
         # Create completion file
         with open("complete.txt", "w") as f:
             f.write("done")
-        
+
         # Clean up
         os.remove(trigger_file)
-        
+
     except Exception as e:
         print(f"Error processing file-based request: {e}")
+
 
 def process_file_based_request():
     while True:
@@ -285,166 +286,6 @@ def process_file_based_request():
             process_single_request("full.txt", "overall")
         time.sleep(1)  # Check every second
 
-def app_gradio():
-    # Start the file monitoring thread
-    monitor_thread = threading.Thread(target=process_file_based_request, daemon=True)
-    monitor_thread.start()
-    
-    with gr.Blocks(title="CatVTON") as demo:
-        gr.Markdown(HEADER)
-        with gr.Row():
-            with gr.Column(scale=1, min_width=350):
-                with gr.Row():
-                    image_path = gr.Image(
-                        type="filepath",
-                        interactive=True,
-                        visible=False,
-                    )
-                    person_image = gr.ImageEditor(
-                        interactive=True, label="Person Image", type="filepath"
-                    )
-
-                with gr.Row():
-                    with gr.Column(scale=1, min_width=230):
-                        cloth_image = gr.Image(
-                            interactive=True, label="Condition Image", type="filepath"
-                        )
-                    with gr.Column(scale=1, min_width=120):
-                        gr.Markdown(
-                            '<span style="color: #808080; font-size: small;">Two ways to provide Mask:<br>1. Upload the person image and use the `🖌️` above to draw the Mask (higher priority)<br>2. Select the `Try-On Cloth Type` to generate automatically </span>'
-                        )
-                        cloth_type = gr.Radio(
-                            label="Try-On Cloth Type",
-                            choices=["upper", "lower", "overall"],
-                            value="upper",
-                        )
-
-                submit = gr.Button("Submit")
-                gr.Markdown(
-                    '<center><span style="color: #FF0000">!!! Click only Once, Wait for Delay !!!</span></center>'
-                )
-
-                gr.Markdown(
-                    '<span style="color: #808080; font-size: small;">Advanced options can adjust details:<br>1. `Inference Step` may enhance details;<br>2. `CFG` is highly correlated with saturation;<br>3. `Random seed` may improve pseudo-shadow.</span>'
-                )
-                with gr.Accordion("Advanced Options", open=False):
-                    num_inference_steps = gr.Slider(
-                        label="Inference Step",
-                        minimum=10,
-                        maximum=100,
-                        step=5,
-                        value=50,
-                    )
-                    # Guidence Scale
-                    guidance_scale = gr.Slider(
-                        label="CFG Strenth",
-                        minimum=0.0,
-                        maximum=7.5,
-                        step=0.5,
-                        value=2.5,
-                    )
-                    # Random Seed
-                    seed = gr.Slider(
-                        label="Seed", minimum=-1, maximum=10000, step=1, value=42
-                    )
-                    show_type = gr.Radio(
-                        label="Show Type",
-                        choices=[
-                            "result only",
-                            "input & result",
-                            "input & mask & result",
-                        ],
-                        value="input & mask & result",
-                    )
-
-            with gr.Column(scale=2, min_width=500):
-                result_image = gr.Image(interactive=False, label="Result")
-                with gr.Row():
-                    # Photo Examples
-                    root_path = "resource/demo/example"
-                    with gr.Column():
-                        men_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "person", "men", _)
-                                for _ in os.listdir(
-                                    os.path.join(root_path, "person", "men")
-                                )
-                            ],
-                            examples_per_page=4,
-                            inputs=image_path,
-                            label="Person Examples ①",
-                        )
-                        women_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "person", "women", _)
-                                for _ in os.listdir(
-                                    os.path.join(root_path, "person", "women")
-                                )
-                            ],
-                            examples_per_page=4,
-                            inputs=image_path,
-                            label="Person Examples ②",
-                        )
-                        gr.Markdown(
-                            '<span style="color: #808080; font-size: small;">*Person examples come from the demos of <a href="https://huggingface.co/spaces/levihsu/OOTDiffusion">OOTDiffusion</a> and <a href="https://www.outfitanyone.org">OutfitAnyone</a>. </span>'
-                        )
-                    with gr.Column():
-                        condition_upper_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "condition", "upper", _)
-                                for _ in os.listdir(
-                                    os.path.join(root_path, "condition", "upper")
-                                )
-                            ],
-                            examples_per_page=4,
-                            inputs=cloth_image,
-                            label="Condition Upper Examples",
-                        )
-                        condition_overall_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "condition", "overall", _)
-                                for _ in os.listdir(
-                                    os.path.join(root_path, "condition", "overall")
-                                )
-                            ],
-                            examples_per_page=4,
-                            inputs=cloth_image,
-                            label="Condition Overall Examples",
-                        )
-                        condition_person_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "condition", "person", _)
-                                for _ in os.listdir(
-                                    os.path.join(root_path, "condition", "person")
-                                )
-                            ],
-                            examples_per_page=4,
-                            inputs=cloth_image,
-                            label="Condition Reference Person Examples",
-                        )
-                        gr.Markdown(
-                            '<span style="color: #808080; font-size: small;">*Condition examples come from the Internet. </span>'
-                        )
-
-            image_path.change(
-                person_example_fn, inputs=image_path, outputs=person_image
-            )
-
-            submit.click(
-                submit_function,
-                [
-                    person_image,
-                    cloth_image,
-                    cloth_type,
-                    num_inference_steps,
-                    guidance_scale,
-                    seed,
-                    show_type,
-                ],
-                result_image,
-            )
-    demo.queue().launch(share=True, show_error=True)
-
 
 if __name__ == "__main__":
-    app_gradio()
+    process_file_based_request()
